@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package pb;
+
+message ApiCall {
+    uint64 userId = 1;
+    string apiName = 2;
+    bytes params = 3;
+}

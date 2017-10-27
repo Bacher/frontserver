@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"frontserver/proto"
+	"github.com/golang/protobuf/proto"
 	"gorpc/rpc"
 	"io"
 	"io/ioutil"
@@ -88,7 +90,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	apiServer.markRequest()
 
-	res, err := apiServer.con.Request("apiCall", []byte("koko"))
+	apiCallStruct := &pb.ApiCall{userId, "getInitialData", body}
+
+	bytes, _ := proto.Marshal(apiCallStruct)
+
+	res, err := apiServer.con.Request("apiCall", bytes)
 
 	if err != nil {
 		log.Println("Api failed:", err)

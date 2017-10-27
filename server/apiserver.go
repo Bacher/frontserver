@@ -11,7 +11,7 @@ import (
 var NoApiServers = errors.New("has no api servers")
 
 var routes = make(map[uint64]*apiServer)
-var apiServers = make(map[*apiServer]bool)
+var apiServers = make(map[*rpc.Connection]*apiServer)
 
 type apiServer struct {
 	con  *rpc.Connection
@@ -21,15 +21,21 @@ type apiServer struct {
 
 func initApiServers() {
 	go func() {
+		second := true
+
 		for {
 			var rps []uint32 = nil
-			for api := range apiServers {
+			for _, api := range apiServers {
 				rps = append(rps, atomic.LoadUint32(&api.rpm))
 				atomic.SwapUint32(&api.rpm, api.rpm1)
 				atomic.SwapUint32(&api.rpm1, 0)
 			}
 
-			log.Println("RPS:", rps)
+			second = !second
+
+			if second {
+				log.Println("RPS:", rps)
+			}
 
 			time.Sleep(30 * time.Second)
 		}
@@ -44,7 +50,7 @@ func getApiServer() (*apiServer, error) {
 		return nil, NoApiServers
 	}
 
-	for s := range apiServers {
+	for _, s := range apiServers {
 		if s.rpm < min {
 			server = s
 			min = s.rpm
@@ -56,15 +62,16 @@ func getApiServer() (*apiServer, error) {
 
 func addApiServer(con *rpc.Connection) {
 	apiServer := &apiServer{con, 0, 0}
-	apiServers[apiServer] = true
+	apiServers[con] = apiServer
+	log.Printf("Connected    | count: %d\n", len(apiServers))
 }
 
 func removeApiServer(con *rpc.Connection) {
-	for s := range apiServers {
-		if s.con == con {
-			delete(apiServers, s)
-			break
-		}
+	_, ok := apiServers[con]
+
+	if ok {
+		delete(apiServers, con)
+		log.Printf("Disconnected | count: %d\n", len(apiServers))
 	}
 }
 

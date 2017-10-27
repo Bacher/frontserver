@@ -6,23 +6,17 @@ import (
 )
 
 func startRpc() {
-	server := rpc.NewServer(func(apiName string, body []byte) ([]byte, error) {
+	server := rpc.NewServer(func(con *rpc.Connection, apiName string, body []byte) ([]byte, error) {
 		if apiName == "disconnect" {
-
+			removeApiServer(con)
+			return nil, nil
 		}
+
 		log.Printf("Unknown apiMethod for parse %s\n", apiName)
 		return nil, rpc.ApiNotFound
 	})
 
-	server.SetHandlers(
-		func(c *rpc.Connection) {
-			addApiServer(c)
-			log.Printf("Connected    | count: %d\n", len(apiServers))
-		},
-		func(c *rpc.Connection) {
-			removeApiServer(c)
-			log.Printf("Disconnected | count: %d\n", len(apiServers))
-		})
+	server.SetHandlers(addApiServer, removeApiServer)
 
 	err := server.Listen()
 
