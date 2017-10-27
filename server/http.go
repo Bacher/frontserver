@@ -86,6 +86,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apiServer.markRequest()
+
 	res, err := apiServer.con.Request("apiCall", []byte("koko"))
 
 	if err != nil {

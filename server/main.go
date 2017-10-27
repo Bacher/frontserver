@@ -6,6 +6,7 @@ var tokensMap = make(map[string]uint64)
 
 func main() {
 	initDb()
+	initApiServers()
 
 	startRpc()
 	startHttp(HttpPort)
