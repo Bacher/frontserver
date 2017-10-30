@@ -82,19 +82,46 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		routes[userId] = apiServer
 	}
 
+	if apiServer.closing {
+		apiServer.userMut.Lock()
+
+		var ch chan bool
+
+		if apiServer.currentUsers[userId] > 0 {
+			ch = make(chan bool)
+			apiServer.callAfter[userId] = append(apiServer.callAfter[userId], ch)
+		}
+
+		apiServer.userMut.Unlock()
+
+		if ch != nil {
+			<-ch
+		}
+
+		apiServer, err = getApiServer()
+
+		if err != nil {
+			log.Println(err)
+			fail(w, 500, "Internal Server Error")
+			return
+		}
+
+		routes[userId] = apiServer
+	}
+
 	if apiServer == nil {
 		log.Println("Api server not accessable")
 		fail(w, 500, "Internal Server Error")
 		return
 	}
 
+	apiCall := &pb.ApiCall{userId, "getInitialData", body}
+
+	bytes, _ := proto.Marshal(apiCall)
+
 	apiServer.markRequest()
 
-	apiCallStruct := &pb.ApiCall{userId, "getInitialData", body}
-
-	bytes, _ := proto.Marshal(apiCallStruct)
-
-	res, err := apiServer.con.Request("apiCall", bytes)
+	res, err := apiServer.request(userId, "apiCall", bytes)
 
 	if err != nil {
 		log.Println("Api failed:", err)

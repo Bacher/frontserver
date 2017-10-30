@@ -4,6 +4,7 @@ import (
 	"errors"
 	"gorpc/rpc"
 	"log"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -14,9 +15,13 @@ var routes = make(map[uint64]*apiServer)
 var apiServers = make(map[*rpc.Connection]*apiServer)
 
 type apiServer struct {
-	con  *rpc.Connection
-	rpm  uint32
-	rpm1 uint32
+	con          *rpc.Connection
+	closing      bool
+	currentUsers map[uint64]uint16
+	rpm          uint32
+	rpm1         uint32
+	userMut      *sync.RWMutex
+	callAfter    map[uint64][]chan bool
 }
 
 func initApiServers() {
@@ -33,9 +38,9 @@ func initApiServers() {
 
 			second = !second
 
-			if second {
-				log.Println("RPS:", rps)
-			}
+			//if second {
+			//	log.Println("RPS:", rps)
+			//}
 
 			time.Sleep(30 * time.Second)
 		}
@@ -51,7 +56,7 @@ func getApiServer() (*apiServer, error) {
 	}
 
 	for _, s := range apiServers {
-		if s.rpm < min {
+		if !s.closing && s.rpm < min {
 			server = s
 			min = s.rpm
 		}
@@ -61,7 +66,16 @@ func getApiServer() (*apiServer, error) {
 }
 
 func addApiServer(con *rpc.Connection) {
-	apiServer := &apiServer{con, 0, 0}
+	apiServer := &apiServer{
+		con,
+		false,
+		make(map[uint64]uint16),
+		0,
+		0,
+		&sync.RWMutex{},
+		make(map[uint64][]chan bool),
+	}
+
 	apiServers[con] = apiServer
 	log.Printf("Connected    | count: %d\n", len(apiServers))
 }
@@ -75,7 +89,50 @@ func removeApiServer(con *rpc.Connection) {
 	}
 }
 
+func onApiServerClosing(con *rpc.Connection) {
+	apiServer, ok := apiServers[con]
+
+	if ok {
+		apiServer.closing = true
+	}
+}
+
 func (s *apiServer) markRequest() {
 	atomic.AddUint32(&s.rpm, 1)
 	atomic.AddUint32(&s.rpm1, 1)
+}
+
+func (s *apiServer) request(userId uint64, apiName string, body []byte) ([]byte, error) {
+	s.userMut.Lock()
+	s.currentUsers[userId]++
+	s.userMut.Unlock()
+
+	res, err := s.con.Request(apiName, body)
+
+	s.userMut.Lock()
+	if s.currentUsers[userId] <= 1 {
+		delete(s.currentUsers, userId)
+
+		if s.closing {
+			for _, ch := range s.callAfter[userId] {
+				ch <- true
+			}
+
+			delete(s.callAfter, userId)
+		}
+
+	} else {
+		s.currentUsers[userId]--
+	}
+
+	s.userMut.Unlock()
+
+	return res, err
+}
+
+func (s *apiServer) getCurrentCount(userId uint64) uint16 {
+	s.userMut.RLock()
+	count := s.currentUsers[userId]
+	s.userMut.RUnlock()
+	return count
 }

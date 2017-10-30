@@ -8,7 +8,7 @@ import (
 func startRpc() {
 	server := rpc.NewServer(func(con *rpc.Connection, apiName string, body []byte) ([]byte, error) {
 		if apiName == "disconnect" {
-			removeApiServer(con)
+			onApiServerClosing(con)
 			return nil, nil
 		}
 
