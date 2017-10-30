@@ -2,8 +2,10 @@ package dbpool
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/lib/pq"
 	"log"
+	"os"
 	"sync"
 )
 
@@ -46,7 +48,13 @@ func GetConnection() (*sql.DB, error) {
 		return con, nil
 
 	} else {
-		connStr := "user=postgres dbname=postgres sslmode=disable"
+		dbHost := os.Getenv("DB_HOST")
+
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
+
+		connStr := fmt.Sprintf("host=%s port=5432 user=postgres dbname=postgres sslmode=disable", dbHost)
 		con, err := sql.Open("postgres", connStr)
 
 		if err != nil {

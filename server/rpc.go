@@ -3,10 +3,17 @@ package main
 import (
 	"gorpc/rpc"
 	"log"
+	"os"
 )
 
 func startRpc() {
-	server := rpc.NewServer(func(con *rpc.Connection, apiName string, body []byte) ([]byte, error) {
+	addr := os.Getenv("RPC_ADDR")
+
+	if addr == "" {
+		addr = "localhost:9999"
+	}
+
+	server := rpc.NewServer(addr, func(con *rpc.Connection, apiName string, body []byte) ([]byte, error) {
 		if apiName == "disconnect" {
 			onApiServerClosing(con)
 			return nil, nil
