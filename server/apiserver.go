@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"frontserver/future"
 	"gorpc/rpc"
 	"log"
 	"sync"
@@ -21,7 +22,7 @@ type apiServer struct {
 	rpm          uint32
 	rpm1         uint32
 	userMut      *sync.RWMutex
-	callAfter    map[uint64][]chan bool
+	callAfter    map[uint64]*future.Future
 }
 
 func initApiServers() {
@@ -73,7 +74,7 @@ func addApiServer(con *rpc.Connection) {
 		0,
 		0,
 		&sync.RWMutex{},
-		make(map[uint64][]chan bool),
+		make(map[uint64]*future.Future),
 	}
 
 	apiServers[con] = apiServer
@@ -114,8 +115,10 @@ func (s *apiServer) request(userId uint64, apiName string, body []byte) ([]byte,
 		delete(s.currentUsers, userId)
 
 		if s.closing {
-			for _, ch := range s.callAfter[userId] {
-				ch <- true
+			fut, ok := s.callAfter[userId]
+
+			if ok {
+				fut.Done()
 			}
 
 			delete(s.callAfter, userId)
@@ -135,4 +138,16 @@ func (s *apiServer) getCurrentCount(userId uint64) uint16 {
 	count := s.currentUsers[userId]
 	s.userMut.RUnlock()
 	return count
+}
+
+func (s *apiServer) getUserDoneFuture(userId uint64) *future.Future {
+	fut, ok := s.callAfter[userId]
+
+	if ok {
+		return fut
+	} else {
+		fut = future.New()
+		s.callAfter[userId] = fut
+		return fut
+	}
 }

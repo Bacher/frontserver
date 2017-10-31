@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"frontserver/future"
 	"frontserver/proto"
 	"github.com/golang/protobuf/proto"
 	"gorpc/rpc"
@@ -85,17 +86,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if apiServer.closing {
 		apiServer.userMut.Lock()
 
-		var ch chan bool
+		var fut *future.Future = nil
 
 		if apiServer.currentUsers[userId] > 0 {
-			ch = make(chan bool)
-			apiServer.callAfter[userId] = append(apiServer.callAfter[userId], ch)
+			fut = apiServer.getUserDoneFuture(userId)
 		}
 
 		apiServer.userMut.Unlock()
 
-		if ch != nil {
-			<-ch
+		if fut != nil {
+			fut.Then()
 		}
 
 		apiServer, err = getApiServer()
